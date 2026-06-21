@@ -5,6 +5,7 @@ import BottomNav from './components/BottomNav'
 import ProfilePicker from './pages/ProfilePicker'
 import Dashboard from './pages/Dashboard'
 import Plans from './pages/Plans'
+import Program from './pages/Program'
 import Workout from './pages/Workout'
 import RunLog from './pages/RunLog'
 import History from './pages/History'
@@ -56,6 +57,14 @@ function AppRoutes() {
             element={
               <RequireUser>
                 <Plans />
+              </RequireUser>
+            }
+          />
+          <Route
+            path="/program"
+            element={
+              <RequireUser>
+                <Program />
               </RequireUser>
             }
           />

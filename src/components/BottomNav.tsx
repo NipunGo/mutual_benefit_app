@@ -33,13 +33,13 @@ export default function BottomNav() {
       </NavLink>
       {currentUser.role === 'lifter' && (
         <NavLink
-          to="/plans"
+          to="/program"
           className={({ isActive }) =>
             `${linkBase} ${isActive ? 'text-cyan-400' : 'text-slate-400'}`
           }
         >
-          <span className="text-lg">📋</span>
-          Plans
+          <span className="text-lg">📅</span>
+          Program
         </NavLink>
       )}
       <NavLink

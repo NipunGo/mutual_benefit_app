@@ -52,3 +52,42 @@ export interface RunEntry {
   notes?: string
   timestamp: string
 }
+
+// --- 12-week fitness program (checklist) ---
+
+export interface ChecklistItem {
+  id: string
+  label: string
+  done: boolean
+  // Set only on gym-exercise items:
+  loggable?: boolean // shows a weight box when ticked
+  exerciseKey?: string // stable key used to remember weight across weeks
+  scheme?: string // e.g. "3×12"
+  weight?: number // weight logged for this specific session
+}
+
+export interface ProgramSection {
+  id: string
+  title: string // e.g. "Day 1 — Upper A"
+  subtitle?: string // e.g. "+ 15–20 min incline walk"
+  kind: 'gym' | 'weekend'
+  items: ChecklistItem[]
+}
+
+export interface ProgramWeek {
+  week: number // 1..12
+  phase: string // "Foundation" | "Build" | "Push"
+  focus: string // one-line note for the week
+  sections: ProgramSection[]
+  weightKg?: number // logged at the weekend
+}
+
+export interface FitnessProgram {
+  id: string
+  userId: string
+  goal: string
+  dailyTargets: string[] // reference card, editable
+  supplements: ProgramSection
+  weeks: ProgramWeek[]
+  lastWeights: Record<string, number> // exerciseKey -> last logged weight
+}
