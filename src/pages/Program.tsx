@@ -12,6 +12,187 @@ function countDone(items: ChecklistItem[]) {
   return items.reduce((n, i) => n + (i.done ? 1 : 0), 0)
 }
 
+// --- Module-level components (defined OUTSIDE Program so their identity is
+// stable across renders; otherwise every keystroke remounts them and the
+// input loses focus). ---
+
+function ItemRow({
+  item,
+  editing,
+  lastWeight,
+  onToggle,
+  onWeight,
+  onLabel,
+  onScheme,
+  onRemove,
+}: {
+  item: ChecklistItem
+  editing: boolean
+  lastWeight?: number
+  onToggle: () => void
+  onWeight: (raw: string) => void
+  onLabel: (v: string) => void
+  onScheme: (v: string) => void
+  onRemove: () => void
+}) {
+  if (editing) {
+    return (
+      <div className="flex items-center gap-2 py-1">
+        <input
+          className="flex-1 rounded bg-slate-700 px-2 py-1 text-sm"
+          value={item.label}
+          onChange={(e) => onLabel(e.target.value)}
+        />
+        {item.loggable && (
+          <input
+            className="w-16 rounded bg-slate-700 px-2 py-1 text-center text-sm"
+            value={item.scheme ?? ''}
+            placeholder="3×12"
+            onChange={(e) => onScheme(e.target.value)}
+          />
+        )}
+        <button onClick={onRemove} className="text-slate-400 active:text-red-400">
+          ✕
+        </button>
+      </div>
+    )
+  }
+
+  const weightVal = item.weight ?? (item.done ? lastWeight : undefined)
+
+  return (
+    <div className="py-1">
+      <label className="flex items-center gap-3">
+        <input
+          type="checkbox"
+          checked={item.done}
+          onChange={onToggle}
+          className="h-5 w-5 shrink-0 accent-cyan-500"
+        />
+        <span className={`flex-1 text-sm ${item.done ? 'text-slate-500 line-through' : ''}`}>
+          {item.label}
+        </span>
+        {item.scheme && (
+          <span className="shrink-0 rounded bg-slate-700 px-2 py-0.5 text-xs text-slate-300">
+            {item.scheme}
+          </span>
+        )}
+      </label>
+
+      {item.done && item.loggable && (
+        <div className="mt-1 ml-8 flex items-center gap-2">
+          <span className="text-xs text-slate-400">Weight</span>
+          <input
+            type="number"
+            inputMode="decimal"
+            className="w-20 rounded bg-slate-700 px-2 py-1 text-center text-sm"
+            value={weightVal ?? ''}
+            placeholder={lastWeight != null ? `${lastWeight}` : 'kg'}
+            onChange={(e) => onWeight(e.target.value)}
+          />
+          <span className="text-xs text-slate-400">kg</span>
+          {lastWeight != null && item.weight == null && (
+            <span className="text-xs text-slate-500">last: {lastWeight}kg</span>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function SectionCard({
+  section,
+  editing,
+  weekWeight,
+  lastWeightFor,
+  onToggle,
+  onWeight,
+  onLabel,
+  onScheme,
+  onRemove,
+  onAddItem,
+  onSectionTitle,
+  onWeekWeight,
+}: {
+  section: ProgramSection
+  editing: boolean
+  weekWeight?: number
+  lastWeightFor: (key: string) => number | undefined
+  onToggle: (sectionId: string, itemId: string) => void
+  onWeight: (sectionId: string, itemId: string, raw: string) => void
+  onLabel: (sectionId: string, itemId: string, v: string) => void
+  onScheme: (sectionId: string, itemId: string, v: string) => void
+  onRemove: (sectionId: string, itemId: string) => void
+  onAddItem: (sectionId: string, loggable: boolean) => void
+  onSectionTitle: (sectionId: string, v: string) => void
+  onWeekWeight: (raw: string) => void
+}) {
+  const done = countDone(section.items)
+  const total = section.items.length
+
+  return (
+    <div className="rounded-xl border border-slate-700 bg-slate-800 p-4">
+      <div className="flex items-center justify-between gap-2">
+        {editing && section.kind !== 'weekend' ? (
+          <input
+            className="flex-1 rounded bg-slate-700 px-2 py-1 font-medium"
+            value={section.title}
+            onChange={(e) => onSectionTitle(section.id, e.target.value)}
+          />
+        ) : (
+          <span className="font-medium">{section.title}</span>
+        )}
+        <span className="shrink-0 text-xs text-slate-400">
+          {done}/{total}
+        </span>
+      </div>
+      {section.subtitle && !editing && (
+        <p className="mt-0.5 text-xs text-slate-500">{section.subtitle}</p>
+      )}
+
+      {section.kind === 'weekend' && (
+        <div className="mt-3 flex items-center gap-2 rounded-lg bg-slate-700/50 px-3 py-2">
+          <span className="text-sm">⚖️ This week's weight</span>
+          <input
+            type="number"
+            inputMode="decimal"
+            className="ml-auto w-20 rounded bg-slate-700 px-2 py-1 text-center text-sm"
+            value={weekWeight ?? ''}
+            placeholder="kg"
+            onChange={(e) => onWeekWeight(e.target.value)}
+          />
+          <span className="text-xs text-slate-400">kg</span>
+        </div>
+      )}
+
+      <div className="mt-2 divide-y divide-slate-700/60">
+        {section.items.map((item) => (
+          <ItemRow
+            key={item.id}
+            item={item}
+            editing={editing}
+            lastWeight={item.exerciseKey ? lastWeightFor(item.exerciseKey) : undefined}
+            onToggle={() => onToggle(section.id, item.id)}
+            onWeight={(raw) => onWeight(section.id, item.id, raw)}
+            onLabel={(v) => onLabel(section.id, item.id, v)}
+            onScheme={(v) => onScheme(section.id, item.id, v)}
+            onRemove={() => onRemove(section.id, item.id)}
+          />
+        ))}
+      </div>
+
+      {editing && (
+        <button
+          onClick={() => onAddItem(section.id, section.kind === 'gym' && section.title.startsWith('Day'))}
+          className="mt-2 w-full rounded-lg border border-dashed border-slate-600 py-1.5 text-xs text-slate-400 active:bg-slate-700"
+        >
+          + Add item
+        </button>
+      )}
+    </div>
+  )
+}
+
 export default function Program() {
   const { currentUser } = useUser()
   const [program, setProgram] = useState<FitnessProgram | null>(null)
@@ -131,133 +312,7 @@ export default function Program() {
     })
   }
 
-  // --- small render helpers ---
-
-  function ItemRow({ section, item }: { section: ProgramSection; item: ChecklistItem }) {
-    const lastW = item.exerciseKey ? program!.lastWeights[item.exerciseKey] : undefined
-    const weightVal = item.weight ?? (item.done ? lastW : undefined)
-
-    if (editing) {
-      return (
-        <div className="flex items-center gap-2 py-1">
-          <input
-            className="flex-1 rounded bg-slate-700 px-2 py-1 text-sm"
-            value={item.label}
-            onChange={(e) => setLabel(section.id, item.id, e.target.value)}
-          />
-          {item.loggable && (
-            <input
-              className="w-16 rounded bg-slate-700 px-2 py-1 text-center text-sm"
-              value={item.scheme ?? ''}
-              placeholder="3×12"
-              onChange={(e) => setScheme(section.id, item.id, e.target.value)}
-            />
-          )}
-          <button
-            onClick={() => removeItem(section.id, item.id)}
-            className="text-slate-400 active:text-red-400"
-          >
-            ✕
-          </button>
-        </div>
-      )
-    }
-
-    return (
-      <div className="py-1">
-        <label className="flex items-center gap-3">
-          <input
-            type="checkbox"
-            checked={item.done}
-            onChange={() => toggle(section.id, item.id)}
-            className="h-5 w-5 shrink-0 accent-cyan-500"
-          />
-          <span className={`flex-1 text-sm ${item.done ? 'text-slate-500 line-through' : ''}`}>
-            {item.label}
-          </span>
-          {item.scheme && (
-            <span className="shrink-0 rounded bg-slate-700 px-2 py-0.5 text-xs text-slate-300">
-              {item.scheme}
-            </span>
-          )}
-        </label>
-
-        {item.done && item.loggable && (
-          <div className="mt-1 ml-8 flex items-center gap-2">
-            <span className="text-xs text-slate-400">Weight</span>
-            <input
-              type="number"
-              inputMode="decimal"
-              className="w-20 rounded bg-slate-700 px-2 py-1 text-center text-sm"
-              value={weightVal ?? ''}
-              placeholder={lastW != null ? `${lastW}` : 'kg'}
-              onChange={(e) => setWeight(section.id, item.id, e.target.value)}
-            />
-            <span className="text-xs text-slate-400">kg</span>
-            {lastW != null && item.weight == null && (
-              <span className="text-xs text-slate-500">last: {lastW}kg</span>
-            )}
-          </div>
-        )}
-      </div>
-    )
-  }
-
-  function SectionCard({ section }: { section: ProgramSection }) {
-    const done = countDone(section.items)
-    const total = section.items.length
-    return (
-      <div className="rounded-xl border border-slate-700 bg-slate-800 p-4">
-        <div className="flex items-center justify-between gap-2">
-          {editing && section.kind !== 'weekend' ? (
-            <input
-              className="flex-1 rounded bg-slate-700 px-2 py-1 font-medium"
-              value={section.title}
-              onChange={(e) => setSectionTitle(section.id, e.target.value)}
-            />
-          ) : (
-            <span className="font-medium">{section.title}</span>
-          )}
-          <span className="shrink-0 text-xs text-slate-400">
-            {done}/{total}
-          </span>
-        </div>
-        {section.subtitle && !editing && (
-          <p className="mt-0.5 text-xs text-slate-500">{section.subtitle}</p>
-        )}
-
-        {section.kind === 'weekend' && (
-          <div className="mt-3 flex items-center gap-2 rounded-lg bg-slate-700/50 px-3 py-2">
-            <span className="text-sm">⚖️ This week's weight</span>
-            <input
-              type="number"
-              inputMode="decimal"
-              className="ml-auto w-20 rounded bg-slate-700 px-2 py-1 text-center text-sm"
-              value={week.weightKg ?? ''}
-              placeholder="kg"
-              onChange={(e) => setWeekWeight(e.target.value)}
-            />
-            <span className="text-xs text-slate-400">kg</span>
-          </div>
-        )}
-
-        <div className="mt-2 divide-y divide-slate-700/60">
-          {section.items.map((item) => (
-            <ItemRow key={item.id} section={section} item={item} />
-          ))}
-        </div>
-
-        {editing && (
-          <button
-            onClick={() => addItem(section.id, section.kind === 'gym' && section.title.startsWith('Day'))}
-            className="mt-2 w-full rounded-lg border border-dashed border-slate-600 py-1.5 text-xs text-slate-400 active:bg-slate-700"
-          >
-            + Add item
-          </button>
-        )}
-      </div>
-    )
-  }
+  const lastWeightFor = (key: string) => program.lastWeights[key]
 
   const weekDone = week.sections.reduce((n, s) => n + countDone(s.items), 0)
   const weekTotal = week.sections.reduce((n, s) => n + s.items.length, 0)
@@ -342,7 +397,16 @@ export default function Program() {
             <p className="mb-2 text-xs text-slate-500">{program.supplements.subtitle}</p>
             <div className="divide-y divide-slate-700/60">
               {program.supplements.items.map((item) => (
-                <ItemRow key={item.id} section={program.supplements} item={item} />
+                <ItemRow
+                  key={item.id}
+                  item={item}
+                  editing={editing}
+                  onToggle={() => toggle(program.supplements.id, item.id)}
+                  onWeight={(raw) => setWeight(program.supplements.id, item.id, raw)}
+                  onLabel={(v) => setLabel(program.supplements.id, item.id, v)}
+                  onScheme={(v) => setScheme(program.supplements.id, item.id, v)}
+                  onRemove={() => removeItem(program.supplements.id, item.id)}
+                />
               ))}
             </div>
             <div className="mt-2 flex gap-2">
@@ -408,7 +472,21 @@ export default function Program() {
       {/* Sections */}
       <div className="mt-4 flex flex-col gap-3">
         {week.sections.map((section) => (
-          <SectionCard key={section.id} section={section} />
+          <SectionCard
+            key={section.id}
+            section={section}
+            editing={editing}
+            weekWeight={week.weightKg}
+            lastWeightFor={lastWeightFor}
+            onToggle={toggle}
+            onWeight={setWeight}
+            onLabel={setLabel}
+            onScheme={setScheme}
+            onRemove={removeItem}
+            onAddItem={addItem}
+            onSectionTitle={setSectionTitle}
+            onWeekWeight={setWeekWeight}
+          />
         ))}
       </div>
 
