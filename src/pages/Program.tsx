@@ -8,6 +8,8 @@ import type {
   ProgramSection,
 } from '../types'
 
+const APP_VERSION = 'Program v1.2'
+
 function countDone(items: ChecklistItem[]) {
   return items.reduce((n, i) => n + (i.done ? 1 : 0), 0)
 }
@@ -15,6 +17,80 @@ function countDone(items: ChecklistItem[]) {
 // --- Module-level components (defined OUTSIDE Program so their identity is
 // stable across renders; otherwise every keystroke remounts them and the
 // input loses focus). ---
+
+// Edit-mode row: keeps its text in LOCAL state so typing never triggers a
+// global re-render (which on some mobile keyboards drops focus / the keyboard).
+// Commits to global state on blur.
+function EditItemRow({
+  item,
+  onLabel,
+  onScheme,
+  onRemove,
+}: {
+  item: ChecklistItem
+  onLabel: (v: string) => void
+  onScheme: (v: string) => void
+  onRemove: () => void
+}) {
+  const [label, setLabel] = useState(item.label)
+  const [scheme, setScheme] = useState(item.scheme ?? '')
+
+  return (
+    <div className="flex items-center gap-2 py-1">
+      <input
+        className="flex-1 rounded bg-slate-700 px-2 py-1 text-sm"
+        value={label}
+        onChange={(e) => setLabel(e.target.value)}
+        onBlur={() => onLabel(label)}
+      />
+      {item.loggable && (
+        <input
+          className="w-16 rounded bg-slate-700 px-2 py-1 text-center text-sm"
+          value={scheme}
+          placeholder="3×12"
+          onChange={(e) => setScheme(e.target.value)}
+          onBlur={() => onScheme(scheme)}
+        />
+      )}
+      <button onClick={onRemove} className="text-slate-400 active:text-red-400">
+        ✕
+      </button>
+    </div>
+  )
+}
+
+// View-mode weight box: also local state + commit on blur, so typing a weight
+// on mobile stays focused.
+function WeightBox({
+  item,
+  lastWeight,
+  onWeight,
+}: {
+  item: ChecklistItem
+  lastWeight?: number
+  onWeight: (raw: string) => void
+}) {
+  const [weight, setWeight] = useState(item.weight != null ? String(item.weight) : '')
+
+  return (
+    <div className="mt-1 ml-8 flex items-center gap-2">
+      <span className="text-xs text-slate-400">Weight</span>
+      <input
+        type="number"
+        inputMode="decimal"
+        className="w-20 rounded bg-slate-700 px-2 py-1 text-center text-sm"
+        value={weight}
+        placeholder={lastWeight != null ? `${lastWeight}` : 'kg'}
+        onChange={(e) => setWeight(e.target.value)}
+        onBlur={() => onWeight(weight)}
+      />
+      <span className="text-xs text-slate-400">kg</span>
+      {lastWeight != null && weight === '' && (
+        <span className="text-xs text-slate-500">last: {lastWeight}kg</span>
+      )}
+    </div>
+  )
+}
 
 function ItemRow({
   item,
@@ -36,29 +112,9 @@ function ItemRow({
   onRemove: () => void
 }) {
   if (editing) {
-    return (
-      <div className="flex items-center gap-2 py-1">
-        <input
-          className="flex-1 rounded bg-slate-700 px-2 py-1 text-sm"
-          value={item.label}
-          onChange={(e) => onLabel(e.target.value)}
-        />
-        {item.loggable && (
-          <input
-            className="w-16 rounded bg-slate-700 px-2 py-1 text-center text-sm"
-            value={item.scheme ?? ''}
-            placeholder="3×12"
-            onChange={(e) => onScheme(e.target.value)}
-          />
-        )}
-        <button onClick={onRemove} className="text-slate-400 active:text-red-400">
-          ✕
-        </button>
-      </div>
-    )
+    // key forces a fresh local copy whenever the underlying item changes
+    return <EditItemRow key={item.id} item={item} onLabel={onLabel} onScheme={onScheme} onRemove={onRemove} />
   }
-
-  const weightVal = item.weight ?? (item.done ? lastWeight : undefined)
 
   return (
     <div className="py-1">
@@ -80,23 +136,37 @@ function ItemRow({
       </label>
 
       {item.done && item.loggable && (
-        <div className="mt-1 ml-8 flex items-center gap-2">
-          <span className="text-xs text-slate-400">Weight</span>
-          <input
-            type="number"
-            inputMode="decimal"
-            className="w-20 rounded bg-slate-700 px-2 py-1 text-center text-sm"
-            value={weightVal ?? ''}
-            placeholder={lastWeight != null ? `${lastWeight}` : 'kg'}
-            onChange={(e) => onWeight(e.target.value)}
-          />
-          <span className="text-xs text-slate-400">kg</span>
-          {lastWeight != null && item.weight == null && (
-            <span className="text-xs text-slate-500">last: {lastWeight}kg</span>
-          )}
-        </div>
+        // key includes the stored weight so an auto-carried/reset value re-seeds the box
+        <WeightBox key={`${item.id}-${item.weight ?? ''}`} item={item} lastWeight={lastWeight} onWeight={onWeight} />
       )}
     </div>
+  )
+}
+
+function SectionTitleInput({ title, onCommit }: { title: string; onCommit: (v: string) => void }) {
+  const [val, setVal] = useState(title)
+  return (
+    <input
+      className="flex-1 rounded bg-slate-700 px-2 py-1 font-medium"
+      value={val}
+      onChange={(e) => setVal(e.target.value)}
+      onBlur={() => onCommit(val)}
+    />
+  )
+}
+
+function WeekWeightInput({ value, onCommit }: { value?: number; onCommit: (raw: string) => void }) {
+  const [val, setVal] = useState(value != null ? String(value) : '')
+  return (
+    <input
+      type="number"
+      inputMode="decimal"
+      className="ml-auto w-20 rounded bg-slate-700 px-2 py-1 text-center text-sm"
+      value={val}
+      placeholder="kg"
+      onChange={(e) => setVal(e.target.value)}
+      onBlur={() => onCommit(val)}
+    />
   )
 }
 
@@ -134,10 +204,10 @@ function SectionCard({
     <div className="rounded-xl border border-slate-700 bg-slate-800 p-4">
       <div className="flex items-center justify-between gap-2">
         {editing && section.kind !== 'weekend' ? (
-          <input
-            className="flex-1 rounded bg-slate-700 px-2 py-1 font-medium"
-            value={section.title}
-            onChange={(e) => onSectionTitle(section.id, e.target.value)}
+          <SectionTitleInput
+            key={section.id}
+            title={section.title}
+            onCommit={(v) => onSectionTitle(section.id, v)}
           />
         ) : (
           <span className="font-medium">{section.title}</span>
@@ -153,14 +223,7 @@ function SectionCard({
       {section.kind === 'weekend' && (
         <div className="mt-3 flex items-center gap-2 rounded-lg bg-slate-700/50 px-3 py-2">
           <span className="text-sm">⚖️ This week's weight</span>
-          <input
-            type="number"
-            inputMode="decimal"
-            className="ml-auto w-20 rounded bg-slate-700 px-2 py-1 text-center text-sm"
-            value={weekWeight ?? ''}
-            placeholder="kg"
-            onChange={(e) => onWeekWeight(e.target.value)}
-          />
+          <WeekWeightInput key={`ww-${section.id}-${weekWeight ?? ''}`} value={weekWeight} onCommit={onWeekWeight} />
           <span className="text-xs text-slate-400">kg</span>
         </div>
       )}
@@ -230,7 +293,13 @@ export default function Program() {
   function toggle(sectionId: string, itemId: string) {
     edit((d) => {
       const { item } = findItem(d, sectionId, itemId)
-      if (item) item.done = !item.done
+      if (!item) return
+      item.done = !item.done
+      // ticking an exercise auto-fills the weight you used last time
+      if (item.done && item.loggable && item.weight == null && item.exerciseKey) {
+        const last = d.lastWeights[item.exerciseKey]
+        if (last != null) item.weight = last
+      }
     })
   }
 
@@ -507,6 +576,8 @@ export default function Program() {
           Reset whole program
         </button>
       </div>
+
+      <p className="mt-4 text-center text-[10px] text-slate-600">{APP_VERSION}</p>
     </div>
   )
 }
